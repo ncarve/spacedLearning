@@ -21,6 +21,7 @@
     "bluebird": "^3.5.1",
     "dateformat": "^3.0.3",
     "express": "^4.16.3",
+    "logger": "file:../logger",
     "ramda": "^0.25.0",
     "sqlite3": "^4.0.0",
     "uuid": "^3.2.1",

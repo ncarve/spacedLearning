@@ -35,13 +35,7 @@ const Database = class {
     this.db.getAsync = P.promisify(this.db.get);
   }
 
-  checkLoaded() {
-    if(!this.loaded)
-      throw new Error("Database not loaded");
-  }
-
   resetDb() {
-    this.checkLoaded();
     this.db.run("DROP TABLE IF EXISTS questions;")
       .tap(() => log.debug("Table dropped"))
       .then(() => {
@@ -54,7 +48,6 @@ const Database = class {
   }
 
   addQuestions({question, answer}) {
-    this.checkLoaded();
     log.debug(`Adding ${question} ${answer}`);
     return this.db.runAsync("INSERT INTO questions VALUES (?, ?, ?);", uuid(), question, answer)
       .tap(({lastID}) => {
@@ -67,7 +60,6 @@ const Database = class {
   }
 
   getQuestions() {
-    this.checkLoaded();
     return this.db.allAsync("SELECT * FROM questions;")
       .then((rows) => {
         log.debug(`Questions: ${rows.map(r => JSON.stringify(r))}`);
@@ -75,6 +67,28 @@ const Database = class {
       })
       .catch(e => {
         log.error(`Error in getQuestions: ${e.message}`);
+        throw e;
+      });
+  }
+
+  getQuestion(id) {
+    return this.db.getAsync("SELECT * FROM questions WHERE id = ?;", id)
+      .tap((question) => {
+        log.debug(`Question: ${JSON.stringify(question)}`);
+      })
+      .catch(e => {
+        log.error(`Error in getQuestion: ${e.message}`);
+        throw e;
+      });
+  }
+
+  deleteQuestion(id) {
+    return this.db.runAsync("DELETE FROM questions WHERE id = ?;", id)
+      .tap((that) => {
+        log.highlight(`Delete: ${that.changes} row(s) deleted (${id})`);
+      })
+      .catch(e => {
+        log.error(`Error in deleteQuestions: ${e.message}`);
         throw e;
       });
   }

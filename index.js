@@ -3,7 +3,7 @@
 const express = require('express');
 const P = require('bluebird');
 const R = require('ramda');
-const logger = require('./logger');
+const logger = require('logger');
 const Database = require('./questions.js');
 const log = logger.log;
 const yargs = require('yargs');
@@ -31,7 +31,20 @@ app.get('/', (req, res, next) => {
 });
 app.get('/api/questions',
   (req, res, next) => {
-    questions.getQuestions().then((val, ...args) => res.json(val));
+    questions.getQuestions().then((val) => res.json(val));
+  }
+);
+app.get('/api/questions/:id',
+  (req, res, next) => {
+    questions.getQuestion(req.params.id).then((val) => res.json(val));
+  }
+);
+app.delete('/api/questions/:id',
+  (req, res, next) => {
+    questions.deleteQuestion(req.params.id).then(() => {
+      res.status(204);
+      res.send("OK");
+    })
   }
 );
 app.post('/api/questions',
