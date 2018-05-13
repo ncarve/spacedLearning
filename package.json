@@ -1,0 +1,29 @@
+{
+  "name": "spacedlearning",
+  "version": "1.0.0",
+  "description": "Spaced Learning",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --harmony index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ncarve/spacedLearning.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ncarve/spacedLearning/issues"
+  },
+  "homepage": "https://github.com/ncarve/spacedLearning#readme",
+  "dependencies": {
+    "bluebird": "^3.5.1",
+    "dateformat": "^3.0.3",
+    "express": "^4.16.3",
+    "ramda": "^0.25.0",
+    "sqlite3": "^4.0.0",
+    "uuid": "^3.2.1",
+    "yargs": "^11.0.0"
+  }
+}
