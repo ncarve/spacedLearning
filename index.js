@@ -8,6 +8,7 @@ const Database = require('./questions.js');
 const log = logger.log;
 const yargs = require('yargs');
 const bodyParser = require('body-parser');
+const { HttpError } = require('./errors.js');
 
 const argv = yargs
   .default('log', 'info')
@@ -18,8 +19,9 @@ logger.setThreshold(argv.log);
 const app = express();
 
 app.use(function(req, res, next) {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
   log.info(`${req.ip} ${req.method} ${req.originalUrl}`);
   next();
 });
@@ -36,7 +38,12 @@ app.get('/api/questions',
 );
 app.get('/api/questions/:id',
   (req, res, next) => {
-    questions.getQuestion(req.params.id).then((val) => res.json(val));
+    questions.getQuestion(req.params.id)
+    .then((val) => res.json(val))
+    .catch(HttpError, e => {
+      res.status(e.statusCode);
+      res.send(e.message);
+    });
   }
 );
 app.delete('/api/questions/:id',

@@ -3,6 +3,7 @@
 const P = require('bluebird');
 const sqlite = require('sqlite3');
 const uuid = require('uuid/v4');
+const { HttpError } = require('./errors.js');
 let log;
 
 const Database = class {
@@ -39,7 +40,7 @@ const Database = class {
     this.db.run("DROP TABLE IF EXISTS questions;")
       .tap(() => log.debug("Table dropped"))
       .then(() => {
-        this.db.run("CREATE TABLE questions (id CHAR(36), question TEXT, answer TEXT, PRIMARY KEY (id));")
+        this.db.run("CREATE TABLE questions (id CHAR(36), status TEXT, question TEXT, answer TEXT, PRIMARY KEY (id));")
       })
       .tap(() => log.info(`Database reset complete`))
       .tapCatch(e => {
@@ -49,9 +50,9 @@ const Database = class {
 
   addQuestions({question, answer}) {
     log.debug(`Adding ${question} ${answer}`);
-    return this.db.runAsync("INSERT INTO questions VALUES (?, ?, ?);", uuid(), question, answer)
+    return this.db.runAsync("INSERT INTO questions VALUES (?, ?, ?, ?);", uuid(), 'AVAILABLE', question, answer)
       .tap(({lastID}) => {
-          log.info(`Question inserted`, `id ${lastID}`);
+          log.debug(`Question inserted`, `id ${lastID}`);
       })
       .then(({lastID}) => {return this.db.getAsync("SELECT * FROM questions WHERE rowid = ?", lastID);})
       .tapCatch(e => {
@@ -60,36 +61,47 @@ const Database = class {
   }
 
   getQuestions() {
-    return this.db.allAsync("SELECT * FROM questions;")
+    return this.db.allAsync("SELECT * FROM questions WHERE status = 'AVAILABLE';")
       .then((rows) => {
         log.debug(`Questions: ${rows.map(r => JSON.stringify(r))}`);
         return rows;
       })
-      .catch(e => {
+      .tapCatch(e => {
         log.error(`Error in getQuestions: ${e.message}`);
-        throw e;
       });
   }
 
   getQuestion(id) {
-    return this.db.getAsync("SELECT * FROM questions WHERE id = ?;", id)
+    return this.db.getAsync("SELECT * FROM questions WHERE id = ? AND status = 'AVAILABLE';", id)
       .tap((question) => {
         log.debug(`Question: ${JSON.stringify(question)}`);
       })
-      .catch(e => {
+      .tap((question) => {
+        if(question === undefined)
+          throw new HttpError("question not found", 404);
+      })
+      .tapCatch(e => {
         log.error(`Error in getQuestion: ${e.message}`);
-        throw e;
+      });
+  }
+
+  realDeleteQuestion(id) {
+    return this.db.runAsync("DELETE FROM questions WHERE id = ?;", id)
+      .tap((that) => {
+        log.debug(`Delete: ${that.changes} row(s) deleted (${id})`);
+      })
+      .tapCatch(e => {
+        log.error(`Error in deleteQuestions: ${e.message}`);
       });
   }
 
   deleteQuestion(id) {
-    return this.db.runAsync("DELETE FROM questions WHERE id = ?;", id)
+    return this.db.runAsync("UPDATE questions SET status = 'DELETED' WHERE id = ? AND status = 'AVAILABLE';", id)
       .tap((that) => {
-        log.highlight(`Delete: ${that.changes} row(s) deleted (${id})`);
+        log.debug(`Delete: ${that.changes} row(s) marked as deleted (${id})`);
       })
-      .catch(e => {
+      .tapCatch(e => {
         log.error(`Error in deleteQuestions: ${e.message}`);
-        throw e;
       });
   }
 }
