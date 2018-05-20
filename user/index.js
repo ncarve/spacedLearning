@@ -8,10 +8,11 @@ const iterations = 1024;
 const keylen = 32;
 
 const User = class {
-  constructor({id, username, password, pwhash, salt}) {
+  constructor({id, username, password, pwhash, salt, token}) {
     this.id = id;
     this.username = username;
     this.password = password;
+    this.token = token;
     if (pwhash) {
       this.pwhashBytes = Buffer.from(pwhash, 'base64');
     }
@@ -41,7 +42,9 @@ const User = class {
       actual: crypto.pbkdf2Async(Buffer.from(password, 'utf8'), this.saltBytes, iterations, keylen, 'sha256'),
       expected: this.pwhashBytes
     })
-    .then(({actual, expected}) => (actual.equals(expected)));
+    .then(({actual, expected}) => {
+      return actual.equals(expected);
+    });
   };
 
   toString() {
@@ -51,7 +54,8 @@ const User = class {
   present = () => {
     return {
       id: this.id,
-      username: this.username
+      username: this.username,
+      token: this.token
     };
   };
 };
