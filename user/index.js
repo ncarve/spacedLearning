@@ -39,7 +39,7 @@ const User = class {
   hasPassword = (password) => {
     return P.props({
       actual: crypto.pbkdf2Async(Buffer.from(password, 'utf8'), this.saltBytes, iterations, keylen, 'sha256'),
-      expected: this.pwhash
+      expected: this.pwhashBytes
     })
     .then(({actual, expected}) => (actual.equals(expected)));
   };

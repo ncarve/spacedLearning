@@ -79,9 +79,17 @@ const Database = class {
       });
   }
 
-  getUser(id) {
+  getUser(id, credentials) {
     log.debug(`Getting user ${id}`);
-    return this.db.getAsync("SELECT * FROM users WHERE id = ?", id)
+    return P.try(() => {
+        if(!credentials || !credentials.user || !(credentials.user instanceof User))
+          throw new HttpError('No credentials found', 401);
+        if(credentials.user.id != id) {
+          log.error(`User ${credentials.user.id} attempting to read user ${id}`);
+          throw new HttpError('Unauthorized', 401);
+        }
+      })
+      .then(() => this.db.getAsync("SELECT * FROM users WHERE id = ?", id))
       .catch(e => {
         log.error(`Error in getUser ${id}: ${e.message}`);
         throw new HttpError(e.message, 400);
@@ -132,14 +140,18 @@ const Database = class {
         if (row === undefined)
           throw new HttpError(`User ${username} not found`, 404);
       })
-      then(row => new User(row));
+      .then(row => new User(row));
   }
 
   login(username, password) {
     log.debug(`${username} logging in with ${password}`);
     return this.getUserByUsername(username)
-      .then((user) => user.hasPassword(password))
-      .then(success => ({success}));
+      .tap((user) => log.debug(`${user.toString()} trying to log in`))
+      .then((user) => user.hasPassword(password) ? user : null)
+      .catch((err) => {
+        //throw new HttpError(err.message, 401);
+        return null;
+      });
   }
 
   addQuestion({questionString, answerString}) {
@@ -173,6 +185,10 @@ const Database = class {
 
   getQuestion(id) {
     return this.db.getAsync("SELECT * FROM questions WHERE id = ? AND status = ?;", id, 'AVAILABLE')
+      .catch(e => {
+        log.error(`Error in getQuestion: ${e.message}`);
+        throw new HttpError(e.message, 400);
+      })
       .tap((question) => {
         log.debug(`Question: ${JSON.stringify(question)}`);
       })
@@ -180,11 +196,7 @@ const Database = class {
         if(question === undefined)
           throw new HttpError("question not found", 404);
       })
-      .then((question) => new Question(question))
-      .catch(e => {
-        log.error(`Error in getQuestion: ${e.message}`);
-        throw new HttpError(e.message, 400);
-      });
+      .then((question) => new Question(question));
   }
 
   // realDeleteQuestion(id) {

@@ -24,7 +24,7 @@ const db = new Database(logger);
 
 app.use(function(req, res, next) {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
   log.info(`${req.ip} ${req.method} ${req.originalUrl}`);
   next();
@@ -32,23 +32,33 @@ app.use(function(req, res, next) {
 app.use(bodyParser.json());
 
 const midBasic = (scope) => {
-  if (scope === undefined)
-    return (req, res, next) => next();
+  if (scope === undefined) {
+    return (req, res, next) => {
+      req.credentials = {
+        user: null
+      };
+      next();
+    }
+  }
   
   return (req, res, next) => {
     return P.resolve(auth(req))
-      .then(user => {
-        if (!user || !user.name || !user.pass)
-          throw new HttpError('No username', 401);
-        return db.login(user.name, user.pass);
+      .then(credentials => {
+        if (!credentials || !credentials.name || !credentials.pass)
+          throw new HttpError('No credentials', 401);
+        return db.login(credentials.name, credentials.pass);
       })
-      .then(({success}) => {
-        if(!success)
-          throw new HttpError('No username', 401);
-        log.highlight("Successful login");
+      .then((user) => {
+        if(user === null)
+          throw new HttpError('Unauthorized', 401);
+        req.credentials = {
+          user
+        };
+        log.debug(`Successful login, credentials: ${JSON.stringify(req.credentials)}`);
         return next();
       })
       .catch(HttpError, e => {
+        log.debug(`Error midBasic: ${e.message}`);
         res.set('WWW-Authenticate', 'Basic realm="localhost:16716"');
         return res.status(401).send();
       });
@@ -58,7 +68,7 @@ const midBasic = (scope) => {
 app.crud = function(collection, handlers, permissions) {
   this.get(`/api/${collection}`, midBasic(permissions.getAll),
     (req, res, next) => {
-      handlers.getAll.bind(db)().then((values) => res.status(200).json(values.map(val => val.present())))
+      handlers.getAll.bind(db)(req.credentials).then((values) => res.status(200).json(values.map(val => val.present())))
       .catch(HttpError, e => {
         res.status(e.statusCode).send(e.message);
       });
@@ -66,7 +76,7 @@ app.crud = function(collection, handlers, permissions) {
   );
   this.get(`/api/${collection}/:id`, midBasic(permissions.get),
     (req, res, next) => {
-      handlers.get.bind(db)(req.params.id)
+      handlers.get.bind(db)(req.params.id, req.credentials)
       .then((val) => res.status(200).json(val.present()))
       .catch(HttpError, e => {
         res.status(e.statusCode).send(e.message);
@@ -75,8 +85,8 @@ app.crud = function(collection, handlers, permissions) {
   );
   this.delete(`/api/${collection}/:id`, midBasic(permissions.delete),
     (req, res, next) => {
-      handlers.delete.bind(db)(req.params.id).then(() => {
-        res.status(204).send("OK");
+      handlers.delete.bind(db)(req.params.id, req.credentials).then(() => {
+        res.status(204).send();
       })
       .catch(HttpError, e => {
         res.status(e.statusCode).send(e.message);
@@ -85,7 +95,7 @@ app.crud = function(collection, handlers, permissions) {
   );
   this.post(`/api/${collection}`, midBasic(permissions.post),
     (req, res, next) => {
-      handlers.post.bind(db)(req.body).then((val) => {
+      handlers.post.bind(db)(req.body, req.credentials).then((val) => {
         res.status(200).json(val.present());
       })
       .catch(HttpError, e => {
@@ -99,6 +109,13 @@ app.get('/', (req, res, next) => {
   res.send('Hello Pancake!');
   next();
 });
+
+app.get('/api/users/login', midBasic('user'),
+  (req, res, next) => {
+    if(req.credentials && req.credentials.user && req.credentials.user instanceof User)
+      return res.status(204).send(req.credentials.user.present());
+    return res.status(401).send('Unauthorized');
+  });
 
 app.crud('questions', {
   get: db.getQuestion,
@@ -118,19 +135,9 @@ app.crud('users', {
   delete: db.deleteUser
 },
 {
+  get: 'user',
   delete: 'admin'
 });
-
-app.post('/api/users',
-  (req, res, next) => {
-    db.addUser(req.body).then((val) => {
-      res.status(200).json(val);
-    })
-    .catch(HttpError, e => {
-      res.status(e.statusCode).send(e.message);
-    });
-  }
-)
 
 const port = 16716;
 app.listen(port, () => log.info(`Spaced Learning app listening on port ${port}!`));
