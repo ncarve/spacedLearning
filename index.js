@@ -28,7 +28,13 @@ app.use(function(req, res, next) {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  log.info(`${req.ip} ${req.method} ${req.originalUrl}`);
+  res.on('finish', function() {
+    log.info(`${req.ip} ${req.method} ${req.originalUrl} => ${res.statusCode}`,
+      `Authorization: ${req.get('Authorization')}`,
+      `Body: ${JSON.stringify(req.body)}`);
+    log.debug(`Headers: ${JSON.stringify(req.headers)}`);
+  });
+  
   next();
 });
 app.use(bodyParser.json());
@@ -64,7 +70,7 @@ const midAuth = (scope, scheme) => {
             return next();
           })
           .catch(HttpError, e => {
-            log.debug(`Error midBasic: ${e.message}`);
+            log.error(`Error midBasic: ${e.message}`);
             res.set('WWW-Authenticate', 'Basic realm="localhost:16716"');
             return res.status(401).send();
           });
