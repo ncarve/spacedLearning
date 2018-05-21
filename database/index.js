@@ -7,6 +7,7 @@ const uuid = require('uuid/v4');
 const { HttpError } = require('../errors');
 const User = require('../user');
 const Question = require('../question');
+const Privilege = require('../user/privilege');
 let log;
 
 const Database = class {
@@ -162,12 +163,27 @@ const Database = class {
       }))
       .then(({user, token}) => {
         user.token = token.toString('hex');
-        return user;
+        return this.getPrivileges(user.id)
+        .then(user.addPrivileges.bind(user))
+        .then(() => user);
       })
       .tap((user) => this.db.runAsync("INSERT INTO sessions VALUES (?, ?, ?, ?);", uuid(), user.id, 'AVAILABLE', user.token))
       .tap((user) => log.highlight(`Session created with token ${user.token}`))
       .catch((err) => {
         throw new HttpError(err.message, 401);
+      });
+  }
+
+  getPrivileges(userId) {
+    return this.db.allAsync("\
+        SELECT p.* FROM privileges p\
+        INNER JOIN users_privileges up ON p.id = up.privilege_id\
+        WHERE up.user_id = ?;", userId)
+      .then(rows => {
+        return rows.map(row => new Privilege(row));
+      })
+      .catch((err) => {
+        throw new HttpError(err.message, 400);
       });
   }
 
@@ -182,8 +198,11 @@ const Database = class {
       .then((row) => {
         if (row === undefined)
           throw new HttpError('Token not found', 401);
-        log.debug(`User ${row.username} logged in`);
-        return new User(row);
+        const user = new User(row);
+        log.debug(`User ${user} logged in`);
+        return this.getPrivileges(user.id)
+          .then(user.addPrivileges.bind(user))
+          .then(() => user);
       });
   }
 

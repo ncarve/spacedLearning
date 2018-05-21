@@ -1,6 +1,7 @@
 'use strict';
 
 const P = require('bluebird');
+const R = require('ramda');
 const crypto = P.promisifyAll(require('crypto'));
 const uuid = require('uuid/v4');
 
@@ -13,6 +14,8 @@ const User = class {
     this.username = username;
     this.password = password;
     this.token = token;
+    this.privileges = [];
+
     if (pwhash) {
       this.pwhashBytes = Buffer.from(pwhash, 'base64');
     }
@@ -21,6 +24,10 @@ const User = class {
     }
     return;
   };
+
+  addPrivileges(newPrivileges) {
+    this.privileges = this.privileges.concat(newPrivileges);
+  }
 
   complete = () => {
     return P.try(() => {
@@ -36,6 +43,10 @@ const User = class {
         this.pwhashBytes = pwhashBytes;
       });
   };
+
+  hasPrivilege = (privilegeName) => {
+    return R.find(privilege => privilege.name == privilegeName, this.privileges);
+  }
 
   hasPassword = (password) => {
     return P.props({

@@ -55,6 +55,8 @@ const midAuth = (scope, scheme) => {
           .then((user) => {
             if(user === null)
               throw new HttpError('Unauthorized', 401);
+              if (!user.hasPrivilege(scope))
+                throw new HttpError('Insufficient privileges', 401);
             req.credentials = {
               user
             };
@@ -71,6 +73,8 @@ const midAuth = (scope, scheme) => {
     case 'oauth2':
       return (req, res, next) => {
           return P.try(() => {
+            if (!req.get('Authorization'))
+              throw new HttpError('Unauthorized', 401);
             const token = req.get('Authorization')
               .toLowerCase()
               .replace(/^bearer ([0-9a-f]*$)/, '$1');
@@ -79,6 +83,8 @@ const midAuth = (scope, scheme) => {
           .then(user => {
             if (!user)
               throw new HttpError('Unauthorized', 401);
+            if (!user.hasPrivilege(scope))
+              throw new HttpError('Insufficient privileges', 401);
             req.credentials = {
               user
             };
@@ -86,7 +92,7 @@ const midAuth = (scope, scheme) => {
             return next();
           })
           .catch(e => {
-            log.debug(`Error mid-oauth2: ${e.message}`);
+            log.error(`Error mid-oauth2: ${e.message}`);
             res.set('Content-Location', '/api/users/login');
             res.set('WWW-Authenticate', `Basic realm="${domain}"`);
             return res.status(401).send('Unauthorized');
