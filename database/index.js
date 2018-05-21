@@ -54,21 +54,45 @@ const Database = class {
       });
   }
 
+  addPrivilegeByName(user, privilegeName) {
+    return this.db.getAsync("SELECT * FROM privileges WHERE name = ?;", privilegeName)
+      .then(row => {
+        if (row === undefined)
+          throw new HttpError(`Privilege ${privilegeName} not found`, 400);
+        user.addPrivileges([new Privilege(row)]);
+      });
+  }
+
   addUser({username, password}) {
-    const user = new User(username, password);
+    const user = new User({username, password});
     log.debug(`Adding ${user.toString()}`);
     return user.complete()
+      .then(() => this.addPrivilegeByName(user, 'user'))
       .tap(() => log.debug(`User: ${user.toString()}`))
       .then(() => {
-        this.db.runAsync("INSERT INTO users VALUES (?, ?, ?, ?);",
-          user.id,
-          user.username,
-          user.pwhashBytes.toString('base64'),
-          user.saltBytes.toString('base64'));
+        const privilegeQueryParams = {};
+        const queryValues = [];
+        for (let i = 0; i < user.privileges.length; i++) {
+          privilegeQueryParams[`$uid${i}`] = user.id;
+          privilegeQueryParams[`$pid${i}`] = user.privileges[i].id;
+          queryValues.push(`($uid${i}, $pid${i})`);
+        }
+        const privilegeQuery = `INSERT INTO users_privileges ('user_id', 'privilege_id') VALUES ${queryValues.join(', ')}`;
+        log.debug(`privilegeQuery      : ${privilegeQuery}`);
+        log.debug(`privilegeQueryParams: ${JSON.stringify(privilegeQueryParams)}`);
+        return P.all([
+          this.db.runAsync("INSERT INTO users VALUES (?, ?, ?, ?, ?);",
+            user.id,
+            'AVAILABLE',
+            user.username,
+            user.pwhashBytes.toString('base64'),
+            user.saltBytes.toString('base64')),
+          this.db.runAsync(privilegeQuery, privilegeQueryParams)
+        ]);
       })
-      .tap(({lastID}) => {
-          log.debug(`User inserted`, `rowid ${lastID}`);
-      })
+      // .tap(({lastID}) => {
+      //     log.debug(`User inserted`, `rowid ${lastID}`);
+      // })
       .then(() => user)
       // .then(({lastID}) => this.db.getAsync("SELECT * FROM users WHERE rowid = ?", lastID))
       // .then((row) => {
@@ -168,7 +192,7 @@ const Database = class {
         .then(() => user);
       })
       .tap((user) => this.db.runAsync("INSERT INTO sessions VALUES (?, ?, ?, ?);", uuid(), user.id, 'AVAILABLE', user.token))
-      .tap((user) => log.highlight(`Session created with token ${user.token}`))
+      .tap((user) => log.debug(`Session created with token ${user.token}`))
       .catch((err) => {
         throw new HttpError(err.message, 401);
       });
